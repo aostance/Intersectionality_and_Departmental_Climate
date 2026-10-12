@@ -1,0 +1,17 @@
+# R session files
+.Rhistory
+.RData
+.Rproj.user/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Safety net: keep manuscripts, original spreadsheets and any real-to-coded
+# mapping out of the repository (they contain names or identifying metadata)
+*.xlsx
+*.xls
+*.docx
+*.pdf
+*PRIVATE*
+*mapping*

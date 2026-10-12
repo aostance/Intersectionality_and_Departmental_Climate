@@ -1,0 +1,12 @@
+"statistic","value"
+"efa_all8_RMSEA",0.0702032383635789
+"efa_all8_TLI",0.886086789738511
+"efa_all8_cumvar",0.647886340507988
+"efa_cit3_RMSEA",0.111194336288501
+"efa_cit3_TLI",0.699494459009972
+"efa_cit3_cumvar",0.480296320033703
+"quartile_cut_25",2.59109105619211
+"quartile_cut_50",2.88899744118119
+"quartile_cut_75",3.17413350985294
+"chisq_combo",95.2086362115598
+"cramers_v_combo",0.176305018143683

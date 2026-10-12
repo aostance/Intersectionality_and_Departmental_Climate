@@ -1,0 +1,17 @@
+"","Q1","Q2","Q3","Q4"
+"Female_NotURM_PWI",2.59,1.68,-2.61,-1.66
+"Male_NotURM_PWI",-3.82,-0.95,2.61,2.16
+"Prefer not to say/Other_NotURM_PWI",0.24,2.24,-2.24,-0.25
+"Female_URM_PWI",1.52,-1.09,0.08,-0.51
+"Male_URM_PWI",0.58,0.87,0.34,-1.78
+"Prefer not to say/Other_URM_PWI",-0.82,0.82,0.82,-0.82
+"Female_Prefer not to say/Other_PWI",4.01,-1.34,-1.34,-1.34
+"Male_Prefer not to say/Other_PWI",0.63,-1.07,0.65,-0.21
+"Prefer not to say/Other_Prefer not to say/Other_PWI",0.8,0.81,-0.27,-1.35
+"Female_NotURM_HBCU",-0.48,-1.42,0.47,1.42
+"Male_NotURM_HBCU",-0.48,-0.47,-1.42,2.37
+"Prefer not to say/Other_NotURM_HBCU",-0.82,2.45,-0.82,-0.82
+"Female_URM_HBCU",-0.7,-2.06,1.61,1.15
+"Male_URM_HBCU",-2.32,-0.85,0.12,3.05
+"Female_Prefer not to say/Other_HBCU",-0.58,-0.58,1.73,-0.58
+"Male_Prefer not to say/Other_HBCU",0.81,0.82,-0.82,-0.82

@@ -1,0 +1,501 @@
+---
+title: "Manuscript Tables"
+output:
+  word_document:
+    reference_docx: null
+---
+
+```{r setup, include=FALSE}
+# ------------------------------------------------------------------------------
+# Manuscript tables (Word output)
+#
+# Builds the formatted tables for the manuscript from the CSV files written by
+# climate_analysis.R. Run climate_analysis.R FIRST, then knit this file
+# (RStudio: "Knit" button, or rmarkdown::render("manuscript_tables.Rmd")).
+#
+#   Table 1    Climate quartile by gender x racial identification x institution type
+#   Table 2    Standardized chi-square residuals for the same grouping
+#   Table 3    Three-way ART ANOVA
+#   Table A1   Factor loadings and item weights (3-factor EFA)
+#   Table A2   Item means by climate quartile
+#
+# Every sample size, fit statistic and cut point quoted in a table footnote is
+# read from the analysis output -- nothing is hardcoded here.
+# ------------------------------------------------------------------------------
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(dplyr)
+library(tidyr)
+library(flextable)
+library(officer)
+
+# Folder written by climate_analysis.R
+data_dir <- "output"
+
+set_flextable_defaults(
+  font.family  = "Times New Roman",
+  font.size    = 9,
+  table.layout = "autofit",
+  border.color = "black"
+)
+
+# ----------------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------------
+
+# Read a CSV from data_dir; return NULL (with a message) if it is missing
+read_csv_safe <- function(filename) {
+  path <- file.path(data_dir, filename)
+  if (!file.exists(path)) {
+    message("File not found: ", path, " -- skipping")
+    return(NULL)
+  }
+  read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+}
+
+# Sample sizes
+n_tab <- read_csv_safe("Sample_sizes.csv")
+if (is.null(n_tab))
+  stop("Sample_sizes.csv not found in '", data_dir, "'. Run climate_analysis.R first.")
+get_n <- function(key) {
+  v <- n_tab$n[n_tab$sample == key]
+  if (length(v) != 1) stop("Sample size '", key, "' not found in Sample_sizes.csv")
+  v
+}
+fmt_n   <- function(x) format(x, big.mark = ",", trim = TRUE)
+n_cit   <- get_n("citizens_PR")        # U.S. citizens / permanent residents
+n_chisq <- get_n("who_exp_analytic")   # gender x race x institution analyses
+n_art   <- get_n("art_2x2x2")          # three-way ART ANOVA sample
+n_q     <- unname(sapply(paste0("quartile_Q", 1:4), get_n))   # Q1-Q4 counts
+
+# Other statistics quoted in footnotes (fit indices, quartile cut points)
+stat_tab <- read_csv_safe("Key_statistics.csv")
+if (is.null(stat_tab))
+  stop("Key_statistics.csv not found in '", data_dir, "'. Run climate_analysis.R first.")
+get_stat <- function(key) {
+  v <- stat_tab$value[stat_tab$statistic == key]
+  if (length(v) != 1) stop("Statistic '", key, "' not found in Key_statistics.csv")
+  v
+}
+
+# Format p-values for display
+fmt_p <- function(p) {
+  ifelse(p < .001, "< .001", formatC(p, digits = 3, format = "f"))
+}
+
+# Generic flextable builder: rounds numeric columns, adds a bold caption and
+# italic footnotes
+make_ft <- function(df, title, footnotes = NULL, digits = 2,
+                    col_labels = NULL, bold_col = NULL) {
+
+  num_cols <- which(sapply(df, is.numeric))
+  df[num_cols] <- lapply(df[num_cols], round, digits = digits)
+
+  ft <- flextable(df)
+
+  if (!is.null(col_labels))
+    ft <- set_header_labels(ft, values = col_labels)
+
+  ft <- ft |>
+    bold(part = "header") |>
+    align(align = "left",   part = "body") |>
+    align(j = num_cols, align = "right", part = "body") |>
+    align(part = "header", align = "center") |>
+    fontsize(size = 9, part = "all") |>
+    padding(padding = 2, part = "all") |>
+    set_caption(
+      caption = as_paragraph(as_b(title)),
+      fp_p    = fp_par(text.align = "left", padding.bottom = 4)
+    ) |>
+    autofit()
+
+  if (!is.null(bold_col))
+    ft <- bold(ft, j = bold_col, part = "body")
+
+  if (!is.null(footnotes)) {
+    for (fn in footnotes)
+      ft <- add_footer_lines(ft, values = fn)
+    ft <- fontsize(ft, size = 8, part = "footer") |>
+          italic(part = "footer")
+  }
+  ft
+}
+```
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+```{r table1-descriptive}
+# Table 1: distribution of climate quartile by gender x racial identification,
+# shown as two panels (PWI and HBCU). All three levels of gender and racial
+# identification are kept, including "Prefer not to say/Other". Inference is
+# carried by the ART ANOVA (Table 3), not by this table.
+#
+# Racial-identification labels: WA = White and/or Asian, BHI = Black, Hispanic,
+# and/or Indigenous (the "NotURM" / "URM" values in the data).
+df_raw <- read_csv_safe("Table1_quartile_by_gender_race_insttype.csv")
+if (!is.null(df_raw)) {
+
+  gender_levels <- c("Female", "Male", "Prefer not to say/Other")
+  urm_levels    <- c("WA", "BHI", "Prefer not to say/Other")
+
+  # Reshape to one row per Gender x URM x institution, one column per quartile
+  df_wide <- df_raw |>
+    dplyr::mutate(
+      Gender = factor(Gender, levels = gender_levels),
+      URM    = factor(dplyr::recode(URM, "NotURM" = "WA", "URM" = "BHI"),
+                      levels = urm_levels)
+    ) |>
+    pivot_wider(names_from = ClimateQuartile, values_from = Freq, values_fill = 0) |>
+    dplyr::arrange(UnivType, URM, Gender) |>
+    dplyr::mutate(
+      Total = Q1 + Q2 + Q3 + Q4,
+      # Cell text "count (row %)", e.g. "91 (36%)"; guard against empty rows
+      Q1_disp = ifelse(Total > 0, sprintf("%d (%.0f%%)", Q1, 100 * Q1 / Total), "0"),
+      Q2_disp = ifelse(Total > 0, sprintf("%d (%.0f%%)", Q2, 100 * Q2 / Total), "0"),
+      Q3_disp = ifelse(Total > 0, sprintf("%d (%.0f%%)", Q3, 100 * Q3 / Total), "0"),
+      Q4_disp = ifelse(Total > 0, sprintf("%d (%.0f%%)", Q4, 100 * Q4 / Total), "0")
+    )
+
+  make_panel <- function(univ) {
+    df_wide |>
+      dplyr::filter(UnivType == univ) |>
+      dplyr::select(Gender, URM, n = Total, Q1 = Q1_disp, Q2 = Q2_disp,
+                    Q3 = Q3_disp, Q4 = Q4_disp)
+  }
+
+  # One shaded header row per institution type, then that panel's rows
+  panel_header <- function(label) {
+    data.frame(Gender = label, URM = "", n = NA_integer_,
+               Q1 = "", Q2 = "", Q3 = "", Q4 = "", stringsAsFactors = FALSE)
+  }
+  display <- bind_rows(panel_header("PWI"),  make_panel("PWI"),
+                       panel_header("HBCU"), make_panel("HBCU"))
+
+  # N actually shown in the table, taken from the data. If it is smaller than
+  # the full sample, say so in the footnote rather than overstating N.
+  table_n <- sum(df_wide$Total)
+  n_gap   <- n_cit - table_n
+  n_note  <- if (n_gap > 0) {
+    paste0(" Note: this table includes ", table_n, " of ", fmt_n(n_cit),
+           " citizen/permanent-resident respondents; ", n_gap,
+           " respondent(s) had missing institution type, gender, or racial",
+           " identification data and are not represented in any row above.")
+  } else {
+    ""
+  }
+
+  ft <- flextable(display) |>
+    set_header_labels(
+      values = list(
+        Gender = "Group", URM = "Racial Identification", n = "n",
+        Q1 = "Q1", Q2 = "Q2", Q3 = "Q3", Q4 = "Q4"
+      )
+    ) |>
+    bold(part = "header") |>
+    align(part = "header", align = "center") |>
+    align(j = c("n", "Q1", "Q2", "Q3", "Q4"), align = "right", part = "body") |>
+    fontsize(size = 9, part = "all") |>
+    padding(padding = 2, part = "all") |>
+    # Bold + shade the PWI / HBCU header rows
+    bold(i = which(display$URM == ""), part = "body") |>
+    bg(i = which(display$URM == ""), bg = "#F0F0F0", part = "body") |>
+    set_caption(
+      caption = as_paragraph(as_b(
+        paste0(
+          "Table 1. Distribution of composite climate score quartile by gender, ",
+          "Racial Identification, and institution type for U.S. citizen/permanent-resident ",
+          "respondents."
+        )
+      )),
+      fp_p = fp_par(text.align = "left", padding.bottom = 4)
+    ) |>
+    add_footer_lines(paste0(
+      "*N = ", fmt_n(table_n), ". Cell values are n (% of row total).", n_note
+    )) |>
+    fontsize(size = 8, part = "footer") |>
+    italic(part = "footer") |>
+    autofit()
+
+  ft
+}
+```
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+```{r table2-stdres}
+# Table 2: standardized residuals from the chi-square test of the
+# gender x racial identification x institution-type grouping vs. climate quartile.
+#
+# The CSV has an unnamed first column holding row labels such as
+# "Female_NotURM_PWI". Gender and URM labels can contain spaces and slashes but
+# never underscores, so the label is split by stripping the known institution
+# and URM suffixes from right to left rather than by splitting on "_".
+# Residuals with |z| > 2 are shown in bold.
+df_res <- read_csv_safe("Table2_standardized_residuals.csv")
+if (!is.null(df_res)) {
+
+  names(df_res)[1] <- "group_combo"
+
+  inst_vals <- c("PWI", "HBCU")
+  urm_vals  <- c("NotURM", "URM", "Prefer not to say/Other")
+
+  parse_combo <- function(x) {
+    inst <- inst_vals[sapply(inst_vals, function(i) endsWith(x, paste0("_", i)))]
+    rest <- substr(x, 1, nchar(x) - nchar(inst) - 1L)
+    urm  <- urm_vals[sapply(urm_vals, function(u) endsWith(rest, paste0("_", u)))]
+    gndr <- substr(rest, 1, nchar(rest) - nchar(urm) - 1L)
+    c(gndr, urm, inst)
+  }
+
+  parsed <- t(sapply(df_res$group_combo, parse_combo))
+  df_res$Gender       <- parsed[, 1]
+  df_res$`URM Status` <- parsed[, 2]
+  df_res$Institution  <- parsed[, 3]
+
+  # Display labels (WA = White and/or Asian; BHI = Black, Hispanic, Indigenous)
+  df_res$`URM Status` <- dplyr::recode(df_res$`URM Status`,
+    "NotURM" = "WA",
+    "URM"    = "BHI",
+    "Prefer not to say/Other" = "Prefer not to say/Other"
+  )
+
+  # Row order: PWI then HBCU; within each, URM status then gender
+  gender_ord <- c("Female", "Male", "Prefer not to say/Other")
+  urm_ord    <- c("WA", "BHI", "Prefer not to say/Other")
+  inst_ord   <- c("PWI", "HBCU")
+
+  df_res <- df_res |>
+    dplyr::mutate(
+      Gender       = factor(Gender,        levels = gender_ord),
+      `URM Status` = factor(`URM Status`,  levels = urm_ord),
+      Institution  = factor(Institution,   levels = inst_ord)
+    ) |>
+    dplyr::arrange(Institution, `URM Status`, Gender) |>
+    dplyr::select(Institution, Gender, `URM Status`, Q1, Q2, Q3, Q4)
+
+  ft_res <- flextable(df_res) |>
+    set_header_labels(values = list(
+      Institution  = "Institution",
+      Gender       = "Gender",
+      `URM Status` = "Racial Identification",
+      Q1 = "Q1", Q2 = "Q2", Q3 = "Q3", Q4 = "Q4"
+    )) |>
+    bold(part = "header") |>
+    align(part = "header", align = "center") |>
+    align(j = c("Q1", "Q2", "Q3", "Q4"), align = "right", part = "body") |>
+    fontsize(size = 9, part = "all") |>
+    padding(padding = 2, part = "all") |>
+    set_caption(
+      caption = as_paragraph(as_b(
+        paste0(
+          "Table 2: Standardized chi-square residuals: Gender x Racial Identification x ",
+          "Institution Type vs. climate score quartile."
+        )
+      )),
+      fp_p = fp_par(text.align = "left", padding.bottom = 4)
+    )
+
+  # Bold residuals beyond |2|, the conventional threshold for a meaningful
+  # departure from independence
+  for (qcol in c("Q1", "Q2", "Q3", "Q4")) {
+    rows_bold <- which(abs(df_res[[qcol]]) > 2)
+    if (length(rows_bold) > 0)
+      ft_res <- bold(ft_res, i = rows_bold, j = qcol, part = "body")
+  }
+
+  # Light shading for HBCU rows
+  hbcu_rows <- which(df_res$Institution == "HBCU")
+  if (length(hbcu_rows) > 0)
+    ft_res <- bg(ft_res, i = hbcu_rows, bg = "#F7F7F7", part = "body")
+
+  ft_res <- ft_res |>
+    add_footer_lines(paste0(
+      "*N = ", fmt_n(n_chisq), ". Standardized residuals (z) reported from chi-square test of independence ",
+      "between the Gender x Racial Identification x Institution Type and climate score ",
+      "quartile. Due to sparse HBCU combinations, > 20% of expected cell counts ",
+      "were < 5 and Monte Carlo chi-square p value (B = 10,000) was used for ",
+      "inference rather than the asymptotic distribution. Standardized residuals ",
+      "from this test are reported with bolded values indicating |z| > 2.00, ",
+      "a meaningful departure from the expected frequency under independence. ",
+      "Positive values indicate the group is overrepresented in that quartile ",
+      "relative to expectation; negative values indicate underrepresentation."
+    )) |>
+    fontsize(size = 8, part = "footer") |>
+    italic(part = "footer") |>
+    autofit()
+
+  ft_res
+}
+```
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+```{r table3-art}
+# Table 3: three-way ART ANOVA (racial identification x gender x institution type)
+df <- read_csv_safe("Table3_ART_anova.csv")
+if (!is.null(df)) {
+
+  # write.csv() adds a row-label column; drop it
+  if (names(df)[1] %in% c("", "X", "V1") || grepl("^[0-9]", names(df)[1]))
+    df <- df[, -1]
+
+  # Human-readable effect names. In the analysis code the factors are called
+  # urm3 / gender3 / univ_type; the "3" is a leftover from the three-level
+  # coding they started from. In this ANOVA each factor has exactly TWO levels
+  # (Male/Female, URM/NotURM, PWI/HBCU), so every effect has 1 numerator df.
+  term_map <- c(
+    "urm3"                   = "Racial Identification",
+    "gender3"                = "Gender",
+    "univ_type"              = "Institution Type (PWI vs. HBCU)",
+    "urm3:gender3"           = "Racial Identification x Gender",
+    "urm3:univ_type"         = "Racial Identification x Institution Type",
+    "gender3:univ_type"      = "Gender x Institution Type",
+    "urm3:gender3:univ_type" = "Racial Identification x Gender x Institution Type"
+  )
+
+  names(df)[1] <- "Effect"
+  df$Effect <- ifelse(df$Effect %in% names(term_map),
+                      term_map[df$Effect], df$Effect)
+
+  # Format the p-value column
+  p_col <- grep("Pr|p.value|p_value", names(df), value = TRUE)[1]
+  df[[p_col]] <- fmt_p(df[[p_col]])
+
+  df_disp <- dplyr::select(df,
+    Effect,
+    Df    = dplyr::matches("^Df$"),
+    DfRes = dplyr::matches("Df.res"),
+    F     = dplyr::matches("F.value|F value"),
+    p     = dplyr::all_of(p_col)
+  )
+
+  ft3 <- make_ft(
+    df_disp,
+    title = paste0(
+      "Table 3: Three-way Aligned Rank Transform (ART) ANOVA: effects of ",
+      "Racial Identification, gender, and institution type on composite climate score."
+    ),
+    digits = 3,
+    col_labels = list(
+      Effect = "Effect",
+      Df     = "df",
+      DfRes  = "df (residual)",
+      F      = "F",
+      p      = "p"
+    ),
+    footnotes = c(
+      paste0(
+        "*N = ", fmt_n(n_art), ". Sample restricted to Female/Male respondents with BHI/WA status ",
+        "(", fmt_n(n_art), " of ", fmt_n(n_cit), " citizens/PRs; ", fmt_n(n_cit - n_art),
+        " excluded due to 'Prefer not to say/Other' responses in gender or racial identification, ",
+        "which created empty cells in the HBCU x Prefer-not-to-say combinations, ",
+        "precluding full factorial estimation)."
+      )
+    )
+  )
+
+  # Extra left padding and a thin border on the p column so it reads as
+  # visually separate from F
+  ft3 <- ft3 |>
+    padding(j = "p", padding.left = 14, part = "all") |>
+    border(j = "p", border.left = fp_border(color = "#CCCCCC", width = 1),
+           part = "all")
+
+  ft3
+}
+```
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+```{r tableA1-loadings}
+# Appendix Table A1: factor loadings and item weights (citizens-only 3-factor EFA).
+# Factor columns are already ordered by content in climate_analysis.R:
+#   Factor 1 = departmental/relational climate, Factor 2 = advisor relationship,
+#   Factor 3 = research/professional engagement.
+df <- read_csv_safe("TableA1_citizens_EFA_loadings.csv")
+if (!is.null(df)) {
+
+  df <- dplyr::select(df, Item, Factor1, Factor2, Factor3, PrimaryFactor, WeightUsed)
+
+  # Items whose largest loading was below 0.30 were given weight 0; name them
+  zero_items <- df$Item[df$WeightUsed == 0]
+  zero_note <- if (length(zero_items) == 0) {
+    ""
+  } else {
+    paste0(
+      if (length(zero_items) == 1) "One item (" else paste0(length(zero_items), " items ("),
+      paste0("'", zero_items, "'", collapse = ", "),
+      ") with no loading >= |0.30| on any factor received weight = 0. "
+    )
+  }
+
+  make_ft(
+    df,
+    title  = paste0(
+      "Table A1: Factor loadings and item weights from the three-factor ",
+      "exploratory factor analysis of climate survey items ",
+      "(U.S. citizen/permanent-resident respondents)"
+    ),
+    digits = 2,
+    col_labels = list(
+      Item          = "Survey Item",
+      Factor1       = "Factor 1\n(Dept./Relational Climate)",
+      Factor2       = "Factor 2\n(Advisor Relationship)",
+      Factor3       = "Factor 3\n(Research/Professional Engagement)",
+      PrimaryFactor = "Primary Factor",
+      WeightUsed    = "Item Weight"
+    ),
+    footnotes = c(
+      paste0(
+        "*N = ", fmt_n(n_cit), ". Oblique (oblimin) rotation; polychoric correlations. ",
+        "Primary Factor = factor on which item loaded most strongly (|loading|); ",
+        "Item Weight = that loading, used to construct the composite climate score. ",
+        zero_note,
+        "RMSEA = ", sprintf("%.3f", get_stat("efa_cit3_RMSEA")),
+        ", TLI = ",  sprintf("%.3f", get_stat("efa_cit3_TLI")),
+        " for the three-factor solution."
+      )
+    )
+  )
+}
+```
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+```{r tableA2-quartile-means}
+# Appendix Table A2: mean item response by climate-score quartile
+df <- read_csv_safe("TableA2_item_means_by_quartile.csv")
+if (!is.null(df)) {
+  cuts <- sprintf("%.2f", c(get_stat("quartile_cut_25"),
+                            get_stat("quartile_cut_50"),
+                            get_stat("quartile_cut_75")))
+  make_ft(
+    df,
+    title  = paste0(
+      "Table A2: Mean survey item response by composite climate score quartile ",
+      "(U.S. citizen/permanent-resident respondents)"
+    ),
+    digits = 2,
+    col_labels = list(Item = "Survey Item", Q1 = "Q1", Q2 = "Q2", Q3 = "Q3", Q4 = "Q4"),
+    footnotes = c(
+      paste0(
+        "*N = ", fmt_n(n_cit), ". Items are rescaled to a 1-4 metric (five-point items linearly ",
+        "rescaled; see Methods). Quartile cut points: ", paste(cuts, collapse = " / "), ". ",
+        "Quartile n: Q1 = ", n_q[1], ", Q2 = ", n_q[2], ", Q3 = ", n_q[3],
+        ", Q4 = ", n_q[4], "."
+      )
+    )
+  )
+}
+```
