@@ -92,9 +92,17 @@ Monte Carlo p-value exactly. All other results are deterministic.
   `climate_analysis.R` identifies the three factors by item content (not by position) and
   stops with an error if they cannot be told apart. Compare your `output/package_versions.txt`
   with the versions below if results differ.
-- Package versions used for the manuscript results: _[paste the contents of
-  `output/package_versions.txt` here]_.
+- Package versions used for the manuscript results: R version 4.4.0 (2024-04-24 ucrt)
+psych 2.6.9
+GPArotation 2026.8.2
+dplyr 1.2.1
+tidyr 1.3.2
+ggplot2 4.0.3
+forcats 1.0.1
+DescTools 0.99.60
+ARTool 0.11.2
+
 
 ## License and citation
 
-_To be added._
+
